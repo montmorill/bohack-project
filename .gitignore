@@ -2,3 +2,4 @@ test*
 *.png
 .env
 test*
+output/*

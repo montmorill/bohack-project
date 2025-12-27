@@ -11,9 +11,11 @@ def find_adb():
         return default_adb_path
     return "adb"  # 如果已添加到PATH
 
-def take_screenshot():
+def take_screenshot(path="./output"):
     """使用ADB抓取设备屏幕截图"""
     print("=== ADB屏幕截图工具 ===")
+    def _output(round):
+        return os.path.join(path, f"screenshot_{round}.png")
     
     try:
         adb_path = find_adb()
@@ -35,9 +37,12 @@ def take_screenshot():
         print(f"✓ 发现设备: {device_serial}")
         
         # 2. 生成截图文件名和路径
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        local_screenshot_path = f"screenshot_test.png"
-        device_screenshot_path = f"/sdcard/screenshot_test.png"
+        count = 0
+        os.makedirs(path, exist_ok=True)
+        while os.path.exists(_output(count)):
+            count += 1
+        local_screenshot_path = _output(count)
+        device_screenshot_path = f"/sdcard/screenshot_temp.png"
         
         # 3. 在设备上抓取截图
         print("📸 正在抓取屏幕截图...")
