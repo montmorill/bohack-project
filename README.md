@@ -4,100 +4,87 @@
 
 ## 系统架构
 
-本系统采用三层Agent架构设计，通过多智能体协作完成商品鉴定任务：
+本系统采用**双模型协作架构**，通过总指挥+执行器模式完成商品鉴定任务：
 
-### Agent架构图
+### 架构设计
 
 ```mermaid
 graph TB
-    subgraph "GUI 应用层"
-        UI[Web/桌面 GUI]
+    subgraph "总指挥 (DeepSeek)"
+        Think[思考决策]
+        Plan[制定计划]
+        Command[下达指令]
+        Analyze[分析结果]
+        Decide[判断完成]
     end
 
-    subgraph "Agent1 - 主策略Agent (Orchestrator)"
-        Task[任务理解与分解]
-        Plan[制定执行计划]
-        Coordinate[协调子Agent]
-        Decide[决策与确认]
+    subgraph "执行器 (AutoGLM-Phone)"
+        Execute[执行手机操作]
+        Screenshot[截图]
+        Search[搜索商品]
+        Operate[页面操作]
     end
 
-    subgraph "Agent2 - 手机操作Agent (Operator)"
-        Screenshot[截图获取]
-        Recognize[页面识别]
-        Analyze[内容分析]
-        Operate[执行操作]
+    subgraph "输出"
+        Report[鉴定报告]
+        Files[截图/数据文件]
     end
 
-    subgraph "Agent3 - 鉴定Agent (Analyzer)"
-        Extract[信息提取]
-        Compare[对比分析]
-        Authenticate[真伪鉴定]
-        Report[生成报告]
-    end
-
-    UI --> Task
-    Task --> Plan
-    Plan --> Coordinate
-
-    Coordinate -->|指令: 搜索商品| Screenshot
-    Screenshot -->|截图| Recognize
-    Recognize -->|页面信息| Analyze
-    Analyze -->|分析结果| Decide
-
-    Decide -->|确认后操作| Operate
-    Operate -->|页面信息| Extract
-    Extract -->|提取信息| Compare
-    Compare -->|对比结果| Authenticate
-    Authenticate -->|鉴定结果| Report
-
-    Report -->|反馈| Coordinate
-    Report -->|最终结果| UI
+    Think --> Plan
+    Plan --> Command
+    Command -->|```指令```| Execute
+    Execute --> Screenshot
+    Execute --> Search
+    Execute --> Operate
+    Screenshot --> Files
+    Search --> Files
+    Operate --> Files
+    Files --> Analyze
+    Analyze --> Think
+    Analyze --> Decide
+    Decide -->|未完成| Think
+    Decide -->|完成| Report
 ```
 
-### Agent职责说明
+### 角色说明
 
-| Agent | 名称 | 主要职责 |
-|-------|------|---------|
-| **Agent1** | 主策略Agent | 理解用户意图、制定任务计划、协调子Agent工作、做出关键决策 |
-| **Agent2** | 手机操作Agent | 截图获取、页面识别、内容分析、执行具体操作（点击、输入等） |
-| **Agent3** | 鉴定Agent | 提取商品信息、与正品对比、进行真伪鉴定、生成鉴定报告 |
+| 角色 | 模型 | 主要职责 |
+|-----|------|---------|
+| **总指挥** | DeepSeek | 思考决策、制定计划、下达指令、分析结果、判断任务完成 |
+| **执行器** | AutoGLM-Phone | 执行手机操作、截图、搜索、页面交互 |
 
 ### 交互流程
 
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant A1 as Agent1(主策略)
-    participant A2 as Agent2(手机操作)
-    participant A3 as Agent3(鉴定)
+    participant Commander as 总指挥(DeepSeek)
+    participant Executor as 执行器(AutoGLM-Phone)
     participant Phone as 手机
 
-    User->>A1: 启动鉴定任务
-    A1->>A2: 打开闲鱼APP
-    A2->>Phone: adb命令操作
-    Phone-->>A2: 页面截图
-    A2-->>A1: 返回页面信息
+    User->>Commander: 启动鉴定任务
+    Commander->>Commander: 分析任务，制定计划
+    Commander->>Executor: ```闲鱼搜索 iPhone 15```
+    Executor->>Phone: adb命令操作
+    Phone-->>Executor: 搜索结果
+    Executor-->>Commander: 返回结果
 
-    A1->>A2: 搜索"薛兆丰漫画经济学"
-    A2->>Phone: 执行搜索
-    Phone-->>A2: 搜索结果页
-    A2-->>A1: 返回结果
+    loop 迭代循环
+        Commander->>Commander: 分析当前状态
+        Commander->>Executor: ```截图并保存```
+        Executor->>Phone: 截图
+        Phone-->>Executor: 图片
+        Executor-->>Commander: 返回截图路径
 
-    A1->>A2: 截图第1个商品
-    A2->>Phone: 截图
-    Phone-->>A2: 商品图片
-    A2-->>A1: 返回截图
+        Commander->>Executor: ```打开第1个商品```
+        Executor->>Phone: 点击操作
+        Phone-->>Executor: 商品详情页
+        Executor-->>Commander: 返回页面信息
 
-    A1->>A3: 鉴定此商品真伪
-    A3->>A3: 提取信息
-    A3->>A3: 对比分析
-    A3-->>A1: 鉴定结果
+        Commander->>Commander: 判断是否继续
+    end
 
-    A1->>A2: 继续下一个商品
-    A2->>Phone: 滑动/操作
-    Note over A1,A3: 循环直到完成
-
-    A1-->>User: 最终鉴定报告
+    Commander-->>User: 最终鉴定报告
 ```
 
 ### 工作流程详解
@@ -143,10 +130,18 @@ flowchart TB
 
 ```
 bohack-project/
-├── main.py                    # 主入口程序
+├── main_double_LLM.py        # ⭐ 主入口程序 (双模型协作架构)
+│                              #   总指挥: deepseek
+│                              #   执行器: autoglm-phone
+├── main.py                   # 原版三层Agent架构 (保留)
 ├── main_autoglm.py           # AutoGLM手机控制程序
 ├── .env                      # 环境变量配置(需填入API密钥)
 ├── .env.example              # 环境变量模板
+├── phone_agent/              # 手机操作模块
+│   ├── __init__.py
+│   ├── agent.py              # AutoGLM封装
+│   ├── prompt.py             # 提示词模板
+│   └── ...
 ├── strategy_agent/           # 商品鉴定模块
 │   ├── __init__.py
 │   ├── agent.py             # 主策略Agent
@@ -207,71 +202,73 @@ LLM_API_KEY=你的DeepSeek密钥
 
 ## 使用方法
 
-### 方式一: 命令行模式
+### 方式一: 双模型协作模式 (推荐) ⭐
+
+使用 `main_double_LLM.py`，总指挥(deepseek) + 执行器(autoglm-phone) 协作完成鉴定：
 
 ```bash
 # 搜索闲鱼商品并鉴定
-python main.py --query "iPhone 15 Pro Max" --platform xianyu
+python main_double_LLM.py --query "iPhone 15 Pro Max" --platform xianyu
 
 # 搜索小红书商品并鉴定
-python main.py --query "Switch游戏机" --platform xiaohongshu
+python main_double_LLM.py --query "Switch游戏机" --platform xiaohongshu
 
 # 指定分析数量
-python main.py -q "AirPods Pro" -p xianyu -m 3
+python main_double_LLM.py -q "AirPods Pro" -p xianyu -m 3
+```
 
-# 交互模式 (可连续搜索多个商品)
+### 方式二: 原版三层Agent架构
+
+使用 `main.py`，采用 StrategyAgent + PhoneAgent + Authenticator 三层架构：
+
+```bash
+python main.py --query "iPhone 15 Pro Max" --platform xianyu
+```
+
+### 方式三: 交互模式
+
+```bash
+# 双模型协作模式交互
+python main_double_LLM.py --interactive
+
+# 原版架构交互
 python main.py --interactive
 ```
 
-### 方式二: Python代码调用
-
-```python
-from strategy_agent import StrategyAgent, Platform
-
-def my_phone_agent():
-    # 这里调用你的AutoGLM手机控制代码
-    pass
-
-agent = StrategyAgent(
-    phone_agent_callable=my_phone_agent,
-    config=None,  # 自动从环境变量加载
-    env_file=".env"
-)
-
-# 运行鉴定
-report = agent.run(
-    query="MacBook Pro",
-    marketplace=Platform.XIANYU,
-    max_products=5
-)
-
-print(report)
-```
-
-## 工作流程
+## 工作流程 (双模型协作)
 
 ```
-1. 搜索二手商品
+1. 总指挥(deepseek)分析任务
    ↓
-   在闲鱼/小红书搜索指定商品
-   截图保存商品信息
+   生成指令 ```闲鱼搜索 iPhone 15```
    
-2. 获取正品参考
+2. 执行器(autoglm-phone)执行搜索
    ↓
-   在得到app搜索官方正品
-   获取官方价格、描述等信息
+   返回搜索结果截图
    
-3. 对比分析
+3. 总指挥分析截图，决定下一步
    ↓
-   价格对比 (是否过低/过高)
-   标题/描述相似度分析
-   卖家信誉评估
+   生成指令 ```截图并保存```
    
-4. 生成报告
+4. 执行器截图保存到output文件夹
    ↓
-   输出: 正品率统计
-         风险指标
-         购买建议
+   返回截图路径
+   
+5. 总指挥继续分析，重复迭代
+   ↓
+   直到判断任务完成，生成最终报告
+```
+
+### 输出文件结构
+
+```
+output/{platform}_{query}_{timestamp}/
+├── screenshots/              # 截图目录
+│   ├── search_01.png        # 搜索结果截图
+│   ├── product_01.png       # 商品详情截图
+│   └── ...
+├── final_report.json        # 最终鉴定报告
+└── verification.log         # 运行日志
 ```
 
 ## 输出示例
