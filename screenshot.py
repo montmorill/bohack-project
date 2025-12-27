@@ -22,7 +22,7 @@ def take_screenshot(path="./output"):
         
         # 1. 检查设备连接情况
         print("🔍 检查设备连接...")
-        result = subprocess.run([adb_path, "devices"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run([adb_path, "devices"], capture_output=True, text=True, timeout=10, encoding='utf-8')
         if result.returncode != 0:
             print(f"❌ 执行adb命令失败: {result.stderr}")
             return 1
@@ -41,28 +41,33 @@ def take_screenshot(path="./output"):
         os.makedirs(path, exist_ok=True)
         while os.path.exists(_output(count)):
             count += 1
-        local_screenshot_path = _output(count)
-        device_screenshot_path = f"/sdcard/screenshot_temp.png"
+        
+        temp_screenshot_path = os.path.join(os.getcwd(), "screenshot_temp.png")
+        device_screenshot_path = "/sdcard/screenshot_temp.png"
         
         # 3. 在设备上抓取截图
         print("📸 正在抓取屏幕截图...")
         screencap_cmd = [adb_path, "-s", device_serial, "shell", "screencap", "-p", device_screenshot_path]
-        result = subprocess.run(screencap_cmd, capture_output=True, text=True, timeout=15)
+        result = subprocess.run(screencap_cmd, capture_output=True, timeout=15, encoding='utf-8')
         if result.returncode != 0:
             print(f"❌ 在设备上抓取截图失败: {result.stderr}")
             return 1
         
-        # 4. 将截图从设备传输到本地
+        # 4. 将截图从设备传输到本地（使用临时路径避免中文路径问题）
         print("📤 正在传输截图到本地...")
-        pull_cmd = [adb_path, "-s", device_serial, "pull", device_screenshot_path, local_screenshot_path]
-        result = subprocess.run(pull_cmd, capture_output=True, text=True, timeout=15)
+        pull_cmd = [adb_path, "-s", device_serial, "pull", device_screenshot_path, temp_screenshot_path]
+        result = subprocess.run(pull_cmd, capture_output=True, timeout=15, encoding='utf-8')
         if result.returncode != 0:
             print(f"❌ 传输截图失败: {result.stderr}")
             return 1
         
         # 5. 删除设备上的临时截图
         subprocess.run([adb_path, "-s", device_serial, "shell", "rm", device_screenshot_path], 
-                      capture_output=True, text=True, timeout=10)
+                      capture_output=True, timeout=10, encoding='utf-8')
+        
+        # 6. 移动到目标路径
+        local_screenshot_path = _output(count)
+        os.rename(temp_screenshot_path, local_screenshot_path)
         
         print(f"✅ 截图已成功保存到: {local_screenshot_path}")
         print(f"📁 文件位置: {os.path.abspath(local_screenshot_path)}")

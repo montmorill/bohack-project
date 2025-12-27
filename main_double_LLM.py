@@ -37,7 +37,7 @@ import re
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Optional, List
-from enum import Enum
+from enum import StrEnum
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -46,7 +46,8 @@ from openai import OpenAI
 # Data Classes
 # =============================================================================
 
-class Platform(Enum):
+
+class Platform(StrEnum):
     XIANYU = "xianyu"
     XIAOHONGSHU = "xiaohongshu"
 
@@ -91,7 +92,7 @@ class VerificationReport:
 
 
 # =============================================================================
-# Phone Agent (Agent2) - 手机操作代理
+# Phone Agent - 手机操作代理
 # =============================================================================
 
 class PhoneAgentWrapper:
@@ -179,8 +180,9 @@ class PhoneAgentWrapper:
             self._agent.reset()
 
 # =============================================================================
-# Verification Agent (Agent1 + Agent3 合并) - 策略+鉴定代理
+# Verification Agent - 策略+鉴定代理
 # =============================================================================
+
 
 class VerificationAgent:
     """
@@ -199,6 +201,7 @@ class VerificationAgent:
       4. 结果返回给 deepseek，继续分析
     - 结束：deepseek 判断任务完成，生成最终报告
     """
+
     def __init__(self, phone_agent: PhoneAgentWrapper, folder_output: str):
         """
         初始化 VerificationAgent_test
@@ -208,12 +211,11 @@ class VerificationAgent:
         """
         self.phone_agent = phone_agent
         self.folder_output = folder_output
-        
 
         self.llm_client = self._create_llm_client()
         self.model = os.getenv("LLM_MODEL", "deepseek-chat")
         self.temperature = 0.7
-        self.max_tokens = 500
+        self.max_tokens = 5000
 
         self.message_history: list[dict] = []
         from screenshot import take_screenshot
@@ -275,7 +277,7 @@ class VerificationAgent:
 
         while iteration < max_iterations:
             iteration += 1
-            self._log(f"\n[迭代 {iteration}/{max_iterations}]")
+            self._log(f"\n[步数限制 {iteration}/{max_iterations}]")
 
             commander_response = self._get_commander_response()
 
@@ -283,7 +285,7 @@ class VerificationAgent:
                 self._log("  ⚠️ 总指挥未能生成有效响应")
                 break
 
-            self._log(f"  📤 总指挥响应: {commander_response[:100]}...")
+            self._log(f"  📤 总指挥响应: {commander_response}")
             self.message_history.append(
                 {"role": "assistant", "content": commander_response})
 
@@ -302,10 +304,10 @@ class VerificationAgent:
                 self.take_screenshot(path=self.folder_output)
                 phone_result = "截图已保存在" + self.folder_output
             else:
-                self._log(f"  📱 执行器指令: {instruction[:80]}...")
+                self._log(f"  📱 执行器指令: {instruction}")
                 phone_result = self._execute_phone_instruction(instruction)
 
-            self._log(f"  📥 执行器响应: {phone_result[:80]}...")
+            self._log(f"  📥 执行器响应: {phone_result}")
             self.message_history.append(
                 {"role": "user", "content": phone_result})
 
@@ -325,12 +327,15 @@ class VerificationAgent:
     ):
         """初始化消息历史，添加 system 提示词和初始任务"""
         from phone_agent.prompt import 基础提示词 as prompt
-        system_prompt = prompt + f"""当前任务：
-        - 搜索关键词: {query}
+        system_prompt = prompt + f"""
+        当前任务：
+        - 商品选择: {query}
         - 目标平台: {platform_name}
         - 鉴定数量: 前{max_products}个商品
 
-        请开始分析，指令必须用 ```...``` 包裹。"""
+        # 请开始分析，指令必须用 ```...``` 包裹。"""
+        # system_prompt = prompt + f"""
+        # 在[得到APP]上随便选择一个商品，然后到小红书上检索关于这个商品的大概率为盗版的盗版相同商品（搜索后小红书导航栏有商品标签）（比如标价明显低于正版价格等情况），并举报它，然后完成任务。"""
 
         self.message_history = [
             {"role": "system", "content": system_prompt},
@@ -339,21 +344,21 @@ class VerificationAgent:
 
     def _get_commander_response(self) -> Optional[str]:
         """获取总指挥的响应"""
-        try:
-            response = self.llm_client.chat.completions.create(
-                model=self.model,
-                messages=self.message_history,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
-            )
-            # print(f"deepseek 指挥: {response}")
+        # try:
+        response = self.llm_client.chat.completions.create(
+            model=self.model,
+            messages=self.message_history,
+            temperature=self.temperature,
+            # max_tokens=self.max_tokens,
+        )
+        # print(f"deepseek 指挥: {response}")
 
-            content = response.choices[0].message.content.strip()
-            return content if content else None
+        content = response.choices[0].message.content.strip()
+        return content if content else None
 
-        except Exception as e:
-            self._log(f"  ⚠️ 获取总指挥响应失败: {e}")
-            return None
+        # except Exception as e:
+        #     self._log(f"  ⚠️ 获取总指挥响应失败: {e}")
+        #     return None
 
     def _execute_phone_instruction(self, instruction: str) -> str:
         """执行器执行手机指令并处理结果"""
@@ -452,8 +457,7 @@ class VerificationAgent:
     def _is_task_complete(self, last_message: str) -> bool:
         """判断任务是否完成"""
         complete_keywords = [
-            "鉴定完成", "任务完成", "最终结论", "报告生成", "最终报告",
-            "已完成", "全部完成", "鉴定结束", "分析完毕", "全部鉴定", "所有商品鉴定完成"
+            "所有商品鉴定完成"
         ]
 
         for keyword in complete_keywords:
@@ -466,10 +470,12 @@ class VerificationAgent:
         """使用正则匹配来提取代码块中的指令"""
         if not content:
             return None
-
+        
+        print(content)
         content = content.strip()
-        code_block_pattern = r'```(?:\w*\s*)?\n?([\s\S]*?)\n?```'
+        code_block_pattern = r'```([\s\S]*?)```'
         matches = re.findall(code_block_pattern, content)
+        print(matches)
 
         if matches:
             instruction = matches[0].strip()
@@ -566,6 +572,7 @@ class VerificationAgent:
 # Main Functions
 # =============================================================================
 
+
 def main():
     load_dotenv()
 
@@ -576,8 +583,8 @@ def main():
 
     phone_agent = PhoneAgentWrapper()
 
-    query = "刘勃讲中国史"
-    platform = Platform.XIANYU
+    query = "第五消费时代"
+    platform = Platform.XIAOHONGSHU
     max_products = 2
 
     print(f"\n测试参数:")
@@ -585,8 +592,8 @@ def main():
     print(f"  目标平台: {'闲鱼' if platform == Platform.XIANYU else '小红书'}")
     print(f"  最大商品数: {max_products}")
     print("=" * 60)
-    folder_output=os.path.join(
-            "output", f"{platform}_{query}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    folder_output = os.path.join(
+        "output", f"{platform}_{query}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
 
     agent = VerificationAgent(
         phone_agent=phone_agent,
@@ -619,6 +626,6 @@ def main():
         traceback.print_exc()
         return None
 
+
 if __name__ == "__main__":
     main()
-
