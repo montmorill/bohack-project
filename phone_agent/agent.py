@@ -5,12 +5,13 @@ import traceback
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from phone_agent.config import get_messages
 from phone_agent.actions import ActionHandler
 from phone_agent.actions.handler import do, finish, parse_action
-from phone_agent.config import get_messages, get_system_prompt
-from phone_agent.device_factory import get_device_factory
 from phone_agent.model import ModelClient, ModelConfig
 from phone_agent.model.client import MessageBuilder
+from phone_agent.config import get_system_prompt
+from phone_agent import adb
 
 
 @dataclass
@@ -140,9 +141,8 @@ class PhoneAgent:
         self._step_count += 1
 
         # Capture current screen state
-        device_factory = get_device_factory()
-        screenshot = device_factory.get_screenshot(self.agent_config.device_id)
-        current_app = device_factory.get_current_app(self.agent_config.device_id)
+        screenshot = adb.get_screenshot(self.agent_config.device_id)
+        current_app = adb.get_current_app(self.agent_config.device_id)
 
         # Build messages
         if is_first:
