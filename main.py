@@ -174,11 +174,11 @@ class PhoneAgentWrapper:
             执行结果
         """
         self._ensure_initialized()
-        # try:
-        result = self._agent.run(instruction)
-            # return str(result) if result else "操作完成"
-        # except Exception as e:
-        #     return f"操作失败: {str(e)}"
+        try:
+            result = self._agent.run(instruction)
+            return str(result) if result else "操作完成"
+        except Exception as e:
+            return f"操作失败: {str(e)}"
     
     def reset(self):
         """重置agent状态"""
@@ -305,6 +305,7 @@ class VerificationAgent:
         
         self._log(f"  -> 指令: {instruction[:50]}...")
         result = self.phone_agent.execute(instruction)
+        print(result)
         self._log(f"  <- 结果: {result[:100]}...")
         
         products = self._parse_products_from_result(result, platform_name)
@@ -765,8 +766,28 @@ def interactive_mode():
             print(f"\n错误: {e}")
 
 
+def get_default_from_env(env_file: str, key: str, default):
+    """从.env文件读取默认配置值"""
+    try:
+        load_dotenv(env_file, override=True)
+        value = os.getenv(key)
+        if value is not None:
+            if key == "MAX_PRODUCTS":
+                return int(value)
+            elif key == "SEARCH_QUERY":
+                return value if value else default
+        return default
+    except Exception:
+        return default
+
+
 def parse_args():
     """解析命令行参数"""
+    env_file = ".env"
+    
+    default_query = get_default_from_env(env_file, "SEARCH_QUERY", "")
+    default_max_products = get_default_from_env(env_file, "MAX_PRODUCTS", 5)
+    
     parser = argparse.ArgumentParser(
         description="商品鉴定助手 - 对比二手平台商品与正品",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -781,6 +802,7 @@ def parse_args():
     parser.add_argument(
         "--query", "-q",
         type=str,
+        default=default_query,
         help="搜索关键词"
     )
     
@@ -795,8 +817,8 @@ def parse_args():
     parser.add_argument(
         "--max-products", "-m",
         type=int,
-        default=5,
-        help="最大商品数 (默认: 5)"
+        default=default_max_products,
+        help=f"最大商品数 (默认: {default_max_products})"
     )
     
     parser.add_argument(
@@ -808,7 +830,7 @@ def parse_args():
     parser.add_argument(
         "--env-file", "-e",
         type=str,
-        default=".env",
+        default=env_file,
         help="环境变量文件 (默认: .env)"
     )
     
@@ -818,6 +840,7 @@ def parse_args():
 def main():
     """主入口"""
     args = parse_args()
+    assert isinstance(args.max_products, int) and args.max_products == 1, f"最大商品数{args.max_products}"
     
     if args.interactive:
         interactive_mode()

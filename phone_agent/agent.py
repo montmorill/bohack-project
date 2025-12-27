@@ -131,7 +131,7 @@ class PhoneAgent:
         self._last_screenshot_path: Optional[str] = None
         self._task_counter = 0
 
-    def run(self, task: str) -> str:
+    def run(self, task: str, output: bool = True) -> str:
         """
         Run the agent to complete a task.
 
@@ -145,14 +145,14 @@ class PhoneAgent:
         self._step_count = 0
 
         # First step with user prompt
-        result = self._execute_step(task, is_first=True)
+        result = self._execute_step(task, is_first=True, output=output)
 
         if result.finished:
             return result.message or "Task completed"
 
         # Continue until finished or max steps reached
         while self._step_count < self.agent_config.max_steps:
-            result = self._execute_step(is_first=False)
+            result = self._execute_step(is_first=False, output=output)
 
             if result.finished:
                 return result.message or "Task completed"
@@ -184,7 +184,7 @@ class PhoneAgent:
         self._step_count = 0
 
     def _execute_step(
-        self, user_prompt: str | None = None, is_first: bool = False
+        self, user_prompt: str | None = None, is_first: bool = False, output: bool = True
     ) -> StepResult:
         """Execute a single step of the agent loop."""
         self._step_count += 1
