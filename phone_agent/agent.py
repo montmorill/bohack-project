@@ -1,9 +1,12 @@
-"""Main PhoneAgent class for orchestrating phone automation."""
+"""Main PhoneAgent class for orchestrating phone automation - Enhanced for Agent2."""
 
 import json
 import traceback
-from dataclasses import dataclass
-from typing import Any, Callable
+import re
+from dataclasses import dataclass, field
+from typing import Any, Callable, Optional, Protocol
+from enum import Enum
+from pathlib import Path
 
 from phone_agent.actions import ActionHandler
 from phone_agent.actions.handler import do, finish, parse_action
@@ -11,6 +14,33 @@ from phone_agent.config import get_messages, get_system_prompt
 from phone_agent.device_factory import get_device_factory
 from phone_agent.model import ModelClient, ModelConfig
 from phone_agent.model.client import MessageBuilder
+
+
+class TaskStatus(Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class TaskMessage:
+    """Agent1 发送给 Agent2 的任务消息。"""
+    task_type: str
+    content: dict
+    task_id: str
+    require_confirmation: bool = False
+    priority: int = 0
+
+
+@dataclass
+class ResultMessage:
+    """Agent2 返回给 Agent1 的结果消息。"""
+    task_id: str
+    status: TaskStatus
+    data: dict = field(default_factory=dict)
+    screenshot_path: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 @dataclass
@@ -39,12 +69,28 @@ class StepResult:
     message: str | None = None
 
 
+class Agent2Protocol(Protocol):
+    """Agent2 的协议接口。"""
+    
+    def execute_task(self, task: TaskMessage) -> ResultMessage:
+        ...
+    
+    def search_products(self, query: str, platform: str, max_products: int) -> ResultMessage:
+        ...
+    
+    def get_product_screenshot(self, product_index: int) -> ResultMessage:
+        ...
+
+
 class PhoneAgent:
     """
     AI-powered agent for automating Android phone interactions.
 
     The agent uses a vision-language model to understand screen content
     and decide on actions to complete user tasks.
+
+    This class also implements Agent2Protocol for integration with the
+    three-tier Agent architecture.
 
     Args:
         model_config: Configuration for the AI model.
@@ -67,6 +113,7 @@ class PhoneAgent:
         agent_config: AgentConfig | None = None,
         confirmation_callback: Callable[[str], bool] | None = None,
         takeover_callback: Callable[[str], None] | None = None,
+        output_dir: str | None = None,
     ):
         self.model_config = model_config or ModelConfig()
         self.agent_config = agent_config or AgentConfig()
@@ -80,6 +127,9 @@ class PhoneAgent:
 
         self._context: list[dict[str, Any]] = []
         self._step_count = 0
+        self._output_dir = output_dir
+        self._last_screenshot_path: Optional[str] = None
+        self._task_counter = 0
 
     def run(self, task: str) -> str:
         """

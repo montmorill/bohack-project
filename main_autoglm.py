@@ -18,8 +18,11 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
 from openai import OpenAI
 
 from phone_agent import PhoneAgent
@@ -685,6 +688,8 @@ def handle_device_commands(args) -> bool:
 
 def main():
     """Main entry point."""
+    load_dotenv()
+    
     args = parse_args()
 
     # Set device type globally based on args

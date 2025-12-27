@@ -1,10 +1,10 @@
 """Device factory for selecting ADB or HDC based on device type."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class DeviceType(Enum):
+class DeviceType(StrEnum):
     """Type of device connection tool."""
 
     ADB = "adb"
@@ -33,6 +33,7 @@ class DeviceFactory:
     def module(self):
         """Get the appropriate device module (adb or hdc)."""
         if self._module is None:
+            assert "adb" == DeviceType.ADB
             if self.device_type == DeviceType.ADB:
                 from phone_agent import adb
 
@@ -42,6 +43,7 @@ class DeviceFactory:
 
                 self._module = hdc
             else:
+                print(type(self.device_type))
                 raise ValueError(f"Unknown device type: {self.device_type}")
         return self._module
 
